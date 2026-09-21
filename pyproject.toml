@@ -1,0 +1,48 @@
+[project]
+name = "charla"
+version = "0.1.0"
+description = "CLI local que lê os bancos de dados do WhatsApp Desktop na máquina do usuário."
+requires-python = ">=3.12"
+dependencies = []
+# websocket-client NÃO entra aqui -- é puro Python e vai vendorizado em
+# src/charla/_vendor/websocket/ (Task 3), pelo mesmo motivo do
+# pycryptodome: o .pyz roda sem `pip install` na máquina do mentorado
+# (critério 14 da spec). Achado bloqueia da revisão dev-10 (2ª rodada):
+# tinha ADR e mecanismo de vendorização para o pycryptodome e deixava esta
+# dependência pura Python (mais fácil de vendorizar que um binário) solta.
+
+[project.optional-dependencies]
+# pycryptodome SÓ para desenvolvimento/teste fora do Windows -- não entra
+# no .pyz (lá é o zip vendorizado win_amd64, ver decifra.py). No ambiente
+# de dev/CI (macOS/Linux) tem pip de verdade, diferente da máquina do
+# mentorado, e os testes de decrypt_page/decrypt_db_file precisam de AES
+# importável fora do Windows. Achado bloqueia 1 da revisão dev-10 (2ª
+# rodada): sem isso, a suíte inteira falha na coleta fora do Windows.
+dev = ["pytest>=8", "ruff>=0.6", "pycryptodome>=3.20"]
+
+[project.scripts]
+charla = "charla.cli:main"
+
+[tool.setuptools.package-data]
+# sem isso, o zip vendorizado só é achado em instalação editável (lê da
+# árvore de fonte direto) -- num wheel/sdist de verdade, ou no .pyz do
+# Plano 3, o zip fica de fora e importlib.resources falha em campo, nunca
+# em CI. Achado ajusta da revisão dev-10 (2ª rodada).
+"charla._vendor" = ["*.zip"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "windows_real: exige Windows real com WhatsApp Desktop UWP instalado; não roda em CI",
+]
+
+[tool.ruff]
+line-length = 100
+# _vendor/ é código de terceiro (pycryptodome, websocket-client) -- sem
+# isso, o estilo de dois projetos que não são nosso entra no lint (achado
+# bloqueia da revisão dev-10, 3ª rodada).
+extend-exclude = ["src/charla/_vendor"]

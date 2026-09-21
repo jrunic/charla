@@ -1,0 +1,51 @@
+# Python bytecode / caches
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.ruff_cache/
+
+# Ambiente virtual
+.venv/
+venv/
+
+# Build / distribuição (zipapp)
+build/
+dist/
+*.egg-info/
+charla.pyz
+
+# Config local do mentorado (nunca commitar)
+.config/charla/
+
+# Bancos decifrados de teste — nunca versionar, mesmo em pasta descartável
+*.dec.db
+*.dec.db-wal
+*-work/
+
+# Dado binário de teste — bloqueado por padrão; só a exceção nomeada no
+# CONTEXTO.md (par de página sintética, Plano 1 Task 4) passa. Achado
+# bloqueia da revisão dev-10 (3ª rodada): nada protegia .bin, e a próxima
+# fixture binária entraria por descuido.
+tests/fixtures/*.bin
+!tests/fixtures/pagina_sintetica_genericstorage_cifrada.bin
+!tests/fixtures/pagina_sintetica_genericstorage_decifrada.bin
+
+# dotenv environment variable files
+.env
+.env.*
+!.env.example
+
+# Editor / SO
+.DS_Store
+.idea/
+.vscode/
+
+# INDEX-<dominio>.md sao gerados pelo jedi-gera-indice-referencia
+docs/INDEX-*.md
+docs/**/INDEX-*.md
+
+# Entry file de ferramenta — gerado pelo mecanismo de carga, com caminho
+# absoluto da máquina. Não pertence ao repositório.
+CLAUDE.md
+GEMINI.md

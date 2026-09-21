@@ -1,0 +1,15 @@
+repos:
+  - repo: local
+    hooks:
+      - id: jedi-validador-frontmatter
+        name: jedi-validador-frontmatter
+        entry: jedi-validador-pre-commit
+        language: system
+        types_or: [markdown, yaml]
+        files: '(\.md|manifesto\.yaml)$'
+        # Só exclusões locais do repo. CLAUDE.md/GEMINI.md/AGENTS.md são pulados
+        # pelo próprio validador desde a v0.1.9 (ADR 20260812-arquivos-de-contexto
+        # -de-ferramenta-fora-do-validador) — não repetir aqui.
+        exclude: '^tests/fixtures/.*$'
+        pass_filenames: true
+        stages: [pre-commit]
