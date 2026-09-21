@@ -18,9 +18,10 @@ Store).
 
 ## Instalação
 
-Baixe `charla.pyz` (arquivo único, sem instalação) e rode com o Python já
-instalado na sua máquina — versão 3.12 ou mais nova, sem precisar de
-`pip install` nem de ambiente virtual:
+Baixe `charla.pyz` (arquivo único, sem instalação) da
+[página de releases](https://github.com/jrunic/charla/releases/latest) e
+rode com o Python já instalado na sua máquina — versão 3.12 ou mais
+nova, sem precisar de `pip install` nem de ambiente virtual:
 
 ```
 python3 charla.pyz conversas

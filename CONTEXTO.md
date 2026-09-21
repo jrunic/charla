@@ -255,6 +255,51 @@ Repetidas aqui mesmo presentes em AMBIENTE.md / USUARIO.md / AGENTE.md, para evi
 
 ## Estado Atual
 
+- 2026-09-21 — **REPOSITÓRIO PÚBLICO E PRIMEIRO RELEASE (v0.1.0) PUBLICADO.**
+  Sequência completa: par de página real (conta real, ver achado de
+  21/09 abaixo) substituído por par sintético → repositório apagado e
+  recriado com história squashada num commit só ("Initial public
+  release", `c82a6ee`) — precedente do `malote`, via script de ação
+  documentada (documento interno do autor, fora deste repositório),
+  verificado em clone virgem que nenhum dos 50 commits antigos (nem o
+  que trazia a página real) é alcançável, com suíte real rodando nesse
+  clone → `gh repo edit --visibility public` → reverificado **depois**
+  do flip, contra o repositório já público de fora (`curl` sem auth,
+  `200`). Pipeline de release novo, `.github/workflows/release.yml`, no
+  molde do `koine` (`release.yml`): testa em `ubuntu-latest` e
+  `macos-latest`, builda `charla.pyz`, confere tag == versão do pacote
+  (comando `charla versao` novo, `src/charla/_version.py` como fonte
+  única — mesmo guard que o `koine` usa, motivado pelo incidente real do
+  `malote` de release com versão errada), publica `GitHub Release` com
+  `charla.pyz` + `SHA256SUMS`, notas extraídas do `CHANGELOG.md` novo.
+  **Rodou de ponta a ponta contra o GitHub real**: tag `v0.1.0` empurrada,
+  os dois jobs de teste, o build e a publicação passaram — release
+  público em <https://github.com/jrunic/charla/releases/tag/v0.1.0>.
+  Verificado como usuário real faria: `curl` do asset sem autenticação,
+  hash conferido contra `SHA256SUMS`, `charla.pyz versao` rodado em
+  ambiente **totalmente limpo** (`env -i`, sem `PATH` nem nada meu) —
+  respondeu `charla 0.1.0`. `README.md` aponta pra página de releases.
+  Limitações desta versão (documentadas no `CHANGELOG.md` e nas notas do
+  release): `.pyz` empacotado validado só no macOS (Windows validado só
+  via fonte); cadeia de decifra Windows validada numa única
+  máquina/conta.
+- 2026-09-21 — **Achado ao medir prontidão para abertura pública: par de
+  página real (cifrada+decifrada, de conta real) versionado desde o
+  Plano 1, com exceção nomeada no `CONTEXTO.md`. Substituído por par
+  sintético**, construído algebricamente com chave conhecida (mesma
+  técnica de `_cifrar_arquivo_para_teste`) — mesma propriedade estrutural
+  que o teste verifica (últimos 12 bytes diferem entre cifrado e
+  decifrado), zero bytes de conta real. Medido antes de decidir: a
+  página real tinha 4068 de 4096 bytes zerados e zero strings legíveis —
+  risco baixo, decisão foi trocar mesmo assim. Também sanitizado nesta
+  rodada: vocabulário e caminhos de operação/infraestrutura interna que
+  apareciam em `CONTEXTO.md`, ADRs locais, `docs/arquitetura.md` e
+  comentários de código/teste — viraram "documento interno do autor,
+  fora deste repositório" ou descrição genérica. Nome real e telefone
+  com DDD real numa fixture "sintética" trocados por dado genérico.
+  Checklist de Pendências corrigido (Plano 2 e 3 estavam marcados `[ ]`
+  já implementados). Revisão independente da documentação achou dois
+  defeitos reais antes disso — ver entrada abaixo.
 - 2026-09-21 — **Revisão independente da documentação exaustiva achou dois
   defeitos reais de código, ambos corrigidos.** `advisor` seguiu
   indisponível; substituído pelo mesmo padrão de `dev-10-revisa-artefato`
