@@ -339,3 +339,21 @@ def test_main_windows_excecao_inesperada_vira_erro_nomeado_sem_stack_trace(
     saida = capsys.readouterr()
     erro = json.loads(saida.err)
     assert "schema inesperado" in erro["erro"]
+
+
+def test_main_versao_imprime_charla_e_o_numero_sem_tocar_plataforma(monkeypatch, capsys):
+    """`versao` responde antes de qualquer dispatch por sys.platform --
+    roda em qualquer SO, sem WhatsApp instalado, sem decifra. Formato
+    "charla X.Y.Z" -- CI faz `awk '{print $2}'` sobre esta saida pra
+    conferir tag == versao do pacote, mesmo padrao do koine."""
+    import charla.cli as cli_mod
+    from charla._version import __version__
+
+    monkeypatch.setattr(cli_mod.sys, "platform", "um-so-que-nao-existe")
+    monkeypatch.setattr(cli_mod.sys, "argv", ["charla", "versao"])
+
+    codigo = cli_mod.main()
+
+    assert codigo == 0
+    saida = capsys.readouterr().out.strip()
+    assert saida == f"charla {__version__}"

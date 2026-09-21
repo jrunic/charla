@@ -4,6 +4,7 @@ import argparse
 import json
 import sys
 
+from charla._version import __version__
 from charla.adaptador_windows.autor_cdp import (
     habilitar_debug_e_reiniciar,
     resolver_autores,
@@ -153,6 +154,8 @@ def montar_parser() -> argparse.ArgumentParser:
     p_habilitar = subs.add_parser("habilitar-autor-windows")
     p_habilitar.set_defaults(funcao=comando_habilitar_autor_windows)
 
+    subs.add_parser("versao")
+
     return parser
 
 
@@ -275,6 +278,14 @@ def main() -> int:
 
     parser = montar_parser()
     args = parser.parse_args()
+
+    if args.comando == "versao":
+        # despachado ANTES do dispatch por sys.platform, de proposito:
+        # nao depende de WhatsApp instalado, nem de decifra, nem de
+        # nenhum adaptador -- roda em qualquer SO. Formato "charla X.Y.Z",
+        # mesmo padrao do koine (CI le com `awk '{print $2}'`).
+        print(f"charla {__version__}")
+        return 0
 
     if sys.platform == "win32":
         return _main_windows(args)
