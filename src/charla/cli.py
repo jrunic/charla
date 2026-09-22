@@ -153,8 +153,22 @@ def comando_mensagens_macos(args, caminho=None):
 
 
 def comando_anexo_macos(args, caminho=None):
+    from pathlib import Path
+
     from charla.adaptador_macos.leitura import ler_anexo as ler_anexo_macos
+    from charla.escrita_atomica import copiar
+
     anexo = ler_anexo_macos(caminho, args.id)
+    # args.destino sempre existe (o parser compartilhado ja tem
+    # --destino desde comando_anexo do Windows) -- sem getattr defensivo
+    destino = args.destino
+    if destino:
+        destino_path = Path(destino)
+        copiar(Path(anexo.caminho_absoluto), destino_path)
+        anexo = type(anexo)(
+            id=anexo.id, conversa_id=anexo.conversa_id, tipo=anexo.tipo,
+            caminho_absoluto=str(destino_path.resolve()),
+        )
     return {"anexo": anexo.para_dict()}
 
 

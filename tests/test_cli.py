@@ -439,3 +439,97 @@ def test_main_windows_anexo_destino_invalido_recusa_nomeada(monkeypatch, capsys)
     erro = json.loads(capsys.readouterr().err)
     assert "não existe" in erro["erro"]
     m_resolver.assert_not_called()
+
+
+def test_main_macos_anexo_sem_destino_comportamento_inalterado(tmp_path, monkeypatch, capsys):
+    """Não-regressão: sem --destino, macOS continua devolvendo só o
+    caminho original, nada copiado (critério 3 da spec)."""
+    import charla.cli as cli_mod
+    from charla.modelo import Anexo
+
+    banco = tmp_path / "ChatStorage.sqlite"
+    banco.write_bytes(b"")
+    arquivo_original = tmp_path / "original.jpg"
+    arquivo_original.write_bytes(b"foto original")
+
+    monkeypatch.setattr(cli_mod.sys, "platform", "darwin")
+    monkeypatch.setattr(cli_mod.sys, "argv", ["charla", "anexo", "1"])
+    monkeypatch.setattr(
+        "charla.adaptador_macos.localizacao.localizar_chat_storage", lambda: banco
+    )
+    monkeypatch.setattr(
+        "charla.adaptador_macos.leitura.ler_anexo",
+        lambda caminho, anexo_id: Anexo(
+            id=anexo_id, conversa_id="1@g.us", tipo="imagem",
+            caminho_absoluto=str(arquivo_original),
+        ),
+    )
+
+    codigo = cli_mod.main()
+
+    assert codigo == 0
+    resultado = json.loads(capsys.readouterr().out)
+    assert resultado["anexo"]["caminho_absoluto"] == str(arquivo_original)
+
+
+def test_main_macos_anexo_com_destino_copia_arquivo(tmp_path, monkeypatch, capsys):
+    import charla.cli as cli_mod
+    from charla.modelo import Anexo
+
+    banco = tmp_path / "ChatStorage.sqlite"
+    banco.write_bytes(b"")
+    arquivo_original = tmp_path / "original.jpg"
+    arquivo_original.write_bytes(b"foto original")
+    destino = tmp_path / "copia.jpg"
+
+    monkeypatch.setattr(cli_mod.sys, "platform", "darwin")
+    monkeypatch.setattr(cli_mod.sys, "argv", ["charla", "anexo", "1", "--destino", str(destino)])
+    monkeypatch.setattr(
+        "charla.adaptador_macos.localizacao.localizar_chat_storage", lambda: banco
+    )
+    monkeypatch.setattr(
+        "charla.adaptador_macos.leitura.ler_anexo",
+        lambda caminho, anexo_id: Anexo(
+            id=anexo_id, conversa_id="1@g.us", tipo="imagem",
+            caminho_absoluto=str(arquivo_original),
+        ),
+    )
+
+    codigo = cli_mod.main()
+
+    assert codigo == 0
+    assert destino.read_bytes() == b"foto original"
+    resultado = json.loads(capsys.readouterr().out)
+    assert resultado["anexo"]["caminho_absoluto"] == str(destino.resolve())
+
+
+def test_main_macos_anexo_destino_invalido_recusa_nomeada_sem_stack_trace(tmp_path, monkeypatch, capsys):
+    import charla.cli as cli_mod
+    from charla.modelo import Anexo
+
+    banco = tmp_path / "ChatStorage.sqlite"
+    banco.write_bytes(b"")
+    arquivo_original = tmp_path / "original.jpg"
+    arquivo_original.write_bytes(b"foto original")
+
+    monkeypatch.setattr(cli_mod.sys, "platform", "darwin")
+    monkeypatch.setattr(
+        cli_mod.sys, "argv",
+        ["charla", "anexo", "1", "--destino", "/pasta/inexistente/foto.jpg"],
+    )
+    monkeypatch.setattr(
+        "charla.adaptador_macos.localizacao.localizar_chat_storage", lambda: banco
+    )
+    monkeypatch.setattr(
+        "charla.adaptador_macos.leitura.ler_anexo",
+        lambda caminho, anexo_id: Anexo(
+            id=anexo_id, conversa_id="1@g.us", tipo="imagem",
+            caminho_absoluto=str(arquivo_original),
+        ),
+    )
+
+    codigo = cli_mod.main()
+
+    assert codigo == 1
+    erro = json.loads(capsys.readouterr().err)
+    assert "não existe" in erro["erro"]
