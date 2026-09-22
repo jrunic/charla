@@ -141,28 +141,54 @@ mas deve melhorar).
 
 ## Passo 4 — Ler um anexo (se houver mídia na conversa)
 
-**No Windows, este comando sempre recusa hoje** — `exit=1`, mensagem fixa
-dizendo que mídia não está implementada nesta plataforma (motivo medido
-em `comandos-e-saida.md`). Não é erro de uso, é limitação conhecida —
-**pular este passo inteiro no Windows**.
-
-**No macOS**: funciona, mas exige um `id` de item de mídia que **não vem
+Funciona nas duas plataformas, mas `--destino` muda de opcional para
+**obrigatório** conforme o SO. `<id>` de item de mídia **não vem
 exposto em nenhuma saída anterior** (lacuna real, documentada em
 `comandos-e-saida.md` → `charla anexo`) — não há, hoje, um caminho
 padrão para um agente descobrir esse `id` só a partir de `conversas`/
-`mensagens`. Se o objetivo é só validar que o comando funciona, qualquer
-`id` numérico serve para exercitar o caminho de erro:
+`mensagens`. **No Windows, o `id` é o mesmo `id` de Mensagem que
+`mensagens` já devolve** (uma mensagem tem no máximo uma mídia); no
+macOS não há atalho equivalente.
+
+**No macOS**, `--destino` é opcional:
 
 ```
-python3 charla.pyz anexo "999999999"
+python3 charla.pyz anexo "<id>"
+```
+
+devolve só o caminho do arquivo original, sem copiar nada. Para copiar
+para um lugar escolhido:
+
+```
+python3 charla.pyz anexo "<id>" --destino "/caminho/escolhido/foto.jpg"
+```
+
+**No Windows**, `--destino` é **obrigatório** — a mídia não existe como
+arquivo até este comando extraí-la:
+
+```
+python3 charla.pyz anexo "<id>" --destino "C:\caminho\escolhido\foto.jpg"
+```
+
+Sem `--destino` no Windows, o comando recusa imediatamente (`exit=1`),
+sem tentar conectar ao WhatsApp. Precisa da mesma pré-condição de
+`mensagens` — se `habilitar-autor-windows` (Passo 3) ainda não rodou,
+rode primeiro.
+
+Se o objetivo é só validar que o comando funciona, qualquer `id`
+numérico serve para exercitar o caminho de erro:
+
+```
+python3 charla.pyz anexo "999999999" --destino "/tmp/teste.jpg"
 ```
 
 **Resultado esperado** (id inexistente, caso comum de teste): `exit=1`,
 `{"erro": "anexo 999999999 não encontrado"}` em stderr — recusa nomeada,
-não stack trace. Se por acaso o `id` escolhido existir de verdade,
-`exit=0` com `{"anexo": {...}}` no stdout, `tipo` em
+não stack trace, e nenhum arquivo criado no destino. Se o `id` existir
+de verdade, `exit=0` com `{"anexo": {...}}` no stdout, `tipo` em
 `imagem`/`documento`/`audio`/`desconhecido`, e `caminho_absoluto`
-apontando para um arquivo real no disco.
+apontando para um arquivo real no disco (o original no macOS sem
+`--destino`; a cópia/o arquivo extraído nos outros casos).
 
 ## Resumo do fluxo completo
 
@@ -177,7 +203,9 @@ mensagens --conversa <id>
   │     sim → habilitar-autor-windows → repetir mensagens
   │     não → segue
   │
-anexo <id-de-midia>          (macOS: funciona · Windows: sempre recusa, pular)
+anexo <id-de-midia> [--destino <caminho>]
+  │     macOS: --destino opcional (copia se presente)
+  │     Windows: --destino obrigatório (extrai via CDP + download + decifra)
 ```
 
 Os quatro comandos existem nas duas plataformas; o que muda é o

@@ -35,7 +35,7 @@ muda por plataforma é o que cada um FAZ, não quais existem:
 |---|---|---|---|
 | `conversas` | nenhum | sim | sim |
 | `mensagens` | `--conversa <id>` (obrigatório) | sim | sim |
-| `anexo` | `<id>` (posicional, obrigatório) | sim (sempre recusa — ver abaixo) | sim |
+| `anexo` | `<id>` (posicional, obrigatório) + `--destino <caminho>` (**obrigatório no Windows**, opcional no macOS) | sim | sim |
 | `habilitar-autor-windows` | nenhum | sim | sim (sempre recusa — ver abaixo) |
 
 `-h`/`--help` funciona em qualquer nível (`charla.pyz -h`, `charla.pyz
@@ -185,25 +185,81 @@ Schema da saída (`stdout`, sucesso):
 é erro**, `exit=0`. Não há distinção entre "conversa existe e está vazia"
 e "conversa não existe" na saída deste comando, nas duas plataformas.
 
-## `charla anexo <id>`
+## `charla anexo <id> [--destino <caminho>]`
 
-`<id>` aqui é o identificador do **item de mídia**, não da conversa — no
-Windows não há como obter esse `id` hoje (ver abaixo); no macOS é o `Z_PK`
-de `ZWAMEDIAITEM`, que não vem exposto em nenhuma saída de `conversas`
-nem `mensagens` — **não há, hoje, um caminho documentado para um
-consumidor externo descobrir esse id sem consultar o banco diretamente.**
-Registrar isso como lacuna real, não presumir mecanismo que não existe.
+`<id>` aqui é o identificador do **item de mídia**, não da conversa —
+**no Windows é o `rowId` da própria Mensagem** (o mesmo valor de `id`
+que `mensagens` já expõe: uma mensagem tem no máximo uma mídia
+associada, então não existe um segundo espaço de identificadores); no
+macOS é o `Z_PK` de `ZWAMEDIAITEM`. Nas duas plataformas, **não há,
+hoje, um caminho documentado para um consumidor externo descobrir esse
+id sem consultar `mensagens`/o banco diretamente** — lacuna real,
+registrada, não um mecanismo que só não foi escrito ainda.
 
-**Windows**: **sempre** devolve erro, independente do `id` passado —
-mídia não está implementada nesta plataforma (o WhatsApp Desktop Windows
-não guarda caminho de arquivo amigável para mídia recebida, medido).
-`exit=1`, sempre a mesma mensagem:
+### `--destino <caminho>`
+
+**Windows**: **obrigatório**. Sem ele, `exit=1`, antes de conectar ao
+WhatsApp ou de qualquer trabalho caro:
 
 ```json
-{"erro": "mídia no Windows não está implementada nesta versão do charla — o WhatsApp Desktop para Windows não guarda caminho de arquivo amigável para mídia recebida (medido; ver documento técnico 'whatsapp-desktop-windows-medicao-plano0-charla.md', item 6)."}
+{"erro": "--destino é obrigatório no Windows — a mídia não existe como arquivo até ser extraída; informe onde salvar."}
 ```
 
-**macOS**: funciona. Lê `ZWAMEDIAITEM` por `Z_PK`, resolve caminho contra
+**macOS**: opcional. Sem ele, comportamento idêntico ao da v0.1.0 — só
+`caminho_absoluto` do arquivo original, nada copiado. Com ele, copia o
+arquivo para o destino e `caminho_absoluto` na resposta passa a apontar
+para a **cópia**, não para o original.
+
+Nas duas plataformas, `--destino` é caminho de **arquivo**, não de
+pasta — quem chama escolhe o nome final; o `charla` não inventa nome a
+partir de metadado da mídia. Destino inválido recusa com `exit=1` e
+mensagem nomeando a causa específica — nunca deixa arquivo truncado ou
+parcial no destino:
+
+```json
+{"erro": "pasta /caminho/pai não existe"}
+```
+```json
+{"erro": "sem permissão de escrita em /caminho/pai"}
+```
+```json
+{"erro": "destino /caminho é um diretório, não um arquivo"}
+```
+
+### Windows — mecanismo e pré-condição
+
+Exige a mesma pré-condição de `mensagens` (porta de debug do WebView2
+habilitada — rode `habilitar-autor-windows` uma vez se ainda não
+rodou). Metadado de mídia (`directPath`/`mediaKey`/`mimetype`) vem do
+runtime JS do WhatsApp em execução, via CDP — **sem abrir a conversa**,
+já disponível em memória para toda mensagem de mídia carregada. Os
+bytes em si **não** trafegam pelo protocolo de debug: vêm de um
+download HTTPS direto contra o CDN do WhatsApp, decifrados localmente
+pelo protocolo público de mídia do WhatsApp (o mesmo que
+`whatsapp-web.js`/`Baileys` usam). Não roda a cadeia de decifra do
+SQLite (`genericStorage.db` etc.) — `anexo` no Windows não abre nenhum
+banco.
+
+Mensagens de erro nomeadas específicas do Windows:
+
+```json
+{"erro": "conexão com o WhatsApp em execução não está disponível — rode 'charla habilitar-autor-windows' uma vez para habilitar."}
+```
+```json
+{"erro": "a verificação de integridade (MAC) da mídia baixada falhou — a chave pode estar errada, o download veio corrompido, ou o formato do protocolo mudou numa atualização do WhatsApp."}
+```
+
+**Residual não medido**: mensagem de mídia fora da janela que o
+WhatsApp Web já carregou em memória (conversa nunca aberta na sessão,
+histórico muito antigo) devolve `anexo <id> não encontrado` mesmo que
+a mídia exista — não confundir com "mídia realmente não existe".
+Só `image` foi verificada de ponta a ponta contra bytes reais;
+`video`/`audio`/`document` usam o mesmo algoritmo documentado, não
+testados contra arquivo real.
+
+### macOS — mecanismo
+
+Lê `ZWAMEDIAITEM` por `Z_PK`, resolve caminho contra
 `<GroupContainer>/Message/`. Schema da saída (`stdout`, sucesso):
 
 ```json
@@ -221,13 +277,15 @@ não guarda caminho de arquivo amigável para mídia recebida, medido).
   confirmado por medição (1=`imagem`, 8=`documento`, 3=`audio`); **todo
   outro código** (inclui vídeo, sticker, e códigos de baixo volume não
   classificados) devolve `"desconhecido"` — não adivinhado.
-- `caminho_absoluto`: aponta para arquivo real no disco (confirmado por
-  validação real, tamanho batendo com `ZFILESIZE`). O `charla` **não**
-  devolve os bytes — quem consome abre o arquivo pelo caminho.
+- `caminho_absoluto`: sem `--destino`, aponta para o arquivo original no
+  disco (confirmado por validação real, tamanho batendo com
+  `ZFILESIZE`). Com `--destino`, aponta para a cópia. O `charla` **não**
+  devolve os bytes no corpo da resposta — quem consome abre o arquivo
+  pelo caminho.
 
-**`id` inexistente no macOS**: `exit=1`,
+**`id` inexistente (nas duas plataformas)**: `exit=1`,
 `{"erro": "anexo <id> não encontrado"}` em stderr — recusa nomeada, não
-stack trace (corrigido nesta sessão; ver commit `cae6468`).
+stack trace.
 
 ## `charla habilitar-autor-windows`
 
@@ -260,7 +318,7 @@ exaustivo de `return <N>`, nenhum código fora desta tabela existe):
 | Código | Significado | Quando |
 |---|---|---|
 | `0` | Sucesso | Comando executou e devolveu resultado sem `"erro"` no JSON |
-| `1` | Erro de dado/estado, não de ambiente | `anexo` Windows (sempre); `anexo` macOS com `id` inexistente; qualquer comando cujo resultado interno já contivesse a chave `"erro"`; qualquer exceção não prevista levantada pelo Adaptador depois de a decifra/localização terem funcionado (banco corrompido, schema divergente numa atualização do WhatsApp) — capturada por um `except Exception` de rede de segurança em `_main_macos`/`_main_windows`, nunca propaga stack trace crua |
+| `1` | Erro de dado/estado, não de ambiente | `anexo` Windows sem `--destino`, com `--destino` inválido, `id` não encontrado, ou falha de MAC na decifra de mídia; `anexo` macOS com `id` inexistente ou `--destino` inválido; qualquer comando cujo resultado interno já contivesse a chave `"erro"`; qualquer exceção não prevista levantada pelo Adaptador depois de a decifra/localização terem funcionado (banco corrompido, schema divergente numa atualização do WhatsApp) — capturada por um `except Exception` de rede de segurança em `_main_macos`/`_main_windows`, nunca propaga stack trace crua |
 | `2` | Erro de uso da CLI (`argparse`) | Comando ausente, comando desconhecido, `--conversa` ausente em `mensagens`, `id` ausente em `anexo` — **não produz JSON**, ver seção seguinte |
 | `4` | Ambiente/plataforma não suportada, ou comando não aplicável nesta plataforma | `ArquiteturaNaoSuportada` (Windows: app não é UWP); `ChatStorageNaoEncontrado` (macOS: `ChatStorage.sqlite` ausente); sistema operacional que não é `win32` nem `darwin`; `habilitar-autor-windows` chamado no macOS |
 | `5` | Falha na cadeia de decifra (Windows) ou no mecanismo de resolução de autor via CDP (Windows) | Ver lista exaustiva de mensagens abaixo |
