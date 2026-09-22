@@ -255,6 +255,39 @@ Repetidas aqui mesmo presentes em AMBIENTE.md / USUARIO.md / AGENTE.md, para evi
 
 ## Estado Atual
 
+- 2026-09-22 — **`charla anexo` funciona no Windows: extrai mídia de
+  verdade, com `--destino` escolhido por quem chama.** Primeiro
+  incremento pós-v0.1.0 (tarefa #1029, spec + Plano 0 de medição + plano
+  de implementação, todos revisados por Agent independente antes de
+  seguir — `advisor` seguiu indisponível). Mecanismo real, medido contra
+  máquina Windows real e depois validado contra o WhatsApp real deste
+  Mac (macOS): CDP extrai só metadado (`directPath`/`mediaKey`/
+  `mimetype`, já em memória, sem abrir conversa nem precisar de
+  `chat_id`) — os bytes vêm de download HTTPS direto contra o CDN do
+  WhatsApp e decifra local em Python (HKDF-SHA256 + AES-256-CBC + HMAC,
+  protocolo público de mídia do WhatsApp, `pycryptodome` já vendorizado).
+  `--destino` é **obrigatório no Windows** (a mídia não existe como
+  arquivo até ser extraída) e **opcional no macOS** (sem ele,
+  comportamento idêntico à v0.1.0; com ele, copia atomicamente e
+  `caminho_absoluto` passa a apontar pra cópia). Escrita/cópia sempre
+  atômicas (`escrita_atomica.py` novo, compartilhado pelas duas
+  plataformas) — nunca arquivo truncado.
+  **Dois defeitos reais achados durante a implementação, corrigidos no
+  caminho**: (1) `comando_anexo` devolvia `{"erro": ...}` em vez de
+  levantar, então o `try/except` novo em `_main_windows` nunca disparava
+  e TUDO (erro incluso) ia pra stdout, violando o contrato documentado —
+  corrigido bifurcando por `"erro" in resultado`; (2) `validar_destino`
+  chamava `destino.is_dir()` antes de checar a pasta pai, e isso levanta
+  `PermissionError` crua quando a pasta pai não é acessível — corrigido
+  invertendo a ordem. Suíte: **86 testes (84 passed + 2 skip
+  `windows_real`)**, robusto com a ordem dos arquivos invertida. Validado
+  de ponta a ponta contra o WhatsApp real deste Mac: cópia byte-idêntica
+  ao original (hash confere), `caminho_absoluto` resolvido corretamente.
+  Residuais nomeados, não fechados: `video`/`audio`/`document` no Windows
+  usam o mesmo algoritmo documentado mas não foram testados contra bytes
+  reais (só `image`); mensagem fora da janela que o WhatsApp Web já
+  carregou em memória não foi medida. Documento técnico:
+  `81-referencia/como-fazer/whatsapp-desktop-windows-medicao-anexo-cdp-charla.md`.
 - 2026-09-21 — **REPOSITÓRIO PÚBLICO E PRIMEIRO RELEASE (v0.1.0) PUBLICADO.**
   Sequência completa: par de página real (conta real, ver achado de
   21/09 abaixo) substituído por par sintético → repositório apagado e
