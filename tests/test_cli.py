@@ -48,18 +48,14 @@ def test_comando_mensagens_e_deterministico_entre_duas_chamadas(tmp_path, monkey
     assert saida1 == saida2
 
 
-def test_comando_anexo_no_windows_recusa_com_causa_nomeada(tmp_path):
-    from charla.cli import comando_anexo
-
-    class ArgsFalsos:
-        id = "abc"
-
-    resultado = comando_anexo(ArgsFalsos(), caminho_generic_storage=None, caminho_contacts=None)
-    assert resultado["erro"] is not None
-    # achado de execucao (dev-04): o texto da mensagem e "nao ESTA
-    # implementada", nao "nao implementada" contiguo -- o teste original do
-    # plano checava a substring errada.
-    assert "não está implementada" in resultado["erro"].lower()
+## test_comando_anexo_no_windows_recusa_com_causa_nomeada removido: testava
+## a recusa fixa de "anexo" no Windows (mensagem "não está implementada"),
+## comportamento substituído por completo pelo incremento de --destino
+## (ver 20260922-1029-spec-charla-anexo-windows.md). O cenário "Windows
+## sem --destino" que interessava é coberto por
+## test_main_windows_anexo_sem_destino_recusa_antes_de_conectar, via
+## main() real -- mais fiel que o ArgsFalsos que este teste usava (que já
+## não tem o atributo destino que o comando_anexo novo exige).
 
 
 from unittest.mock import patch
@@ -357,3 +353,89 @@ def test_main_versao_imprime_charla_e_o_numero_sem_tocar_plataforma(monkeypatch,
     assert codigo == 0
     saida = capsys.readouterr().out.strip()
     assert saida == f"charla {__version__}"
+
+
+def test_montar_parser_anexo_aceita_destino_opcional():
+    from charla.cli import montar_parser
+    parser = montar_parser()
+    args = parser.parse_args(["anexo", "123"])
+    assert args.destino is None
+    args = parser.parse_args(["anexo", "123", "--destino", "/tmp/x.jpg"])
+    assert args.destino == "/tmp/x.jpg"
+
+
+def test_main_windows_anexo_sem_destino_recusa_antes_de_conectar(monkeypatch, capsys):
+    import charla.adaptador_windows.midia  # noqa: F401 -- mesmo achado do import antecipado de decifra.py: garante o ramo seguro do guard de vendorizacao antes do mock de sys.platform
+    import charla.cli as cli_mod
+    monkeypatch.setattr(cli_mod.sys, "platform", "win32")
+    monkeypatch.setattr(cli_mod.sys, "argv", ["charla", "anexo", "123"])
+
+    with patch("charla.cli.localizar_pasta_local_state") as m_localizar, \
+         patch("charla.adaptador_windows.midia.resolver_metadado_midia") as m_resolver:
+        m_localizar.return_value = "/qualquer"
+        codigo = cli_mod.main()
+
+    assert codigo == 1
+    erro = json.loads(capsys.readouterr().err)
+    assert "destino" in erro["erro"].lower()
+    m_resolver.assert_not_called()
+
+
+def test_main_windows_anexo_com_destino_grava_arquivo(tmp_path, monkeypatch, capsys):
+    import charla.adaptador_windows.midia  # noqa: F401 -- ver comentario no teste anterior
+    import charla.cli as cli_mod
+    destino = tmp_path / "foto.jpg"
+    monkeypatch.setattr(cli_mod.sys, "platform", "win32")
+    monkeypatch.setattr(cli_mod.sys, "argv", ["charla", "anexo", "123", "--destino", str(destino)])
+
+    with patch("charla.cli.localizar_pasta_local_state") as m_localizar, \
+         patch(
+             "charla.adaptador_windows.midia.resolver_metadado_midia",
+             return_value={"directPath": "/x", "mediaKey": "a2V5", "mimetype": "image/jpeg"},
+         ), \
+         patch("charla.adaptador_windows.midia.baixar_e_decifrar", return_value=b"bytes da foto"):
+        m_localizar.return_value = "/qualquer"
+        codigo = cli_mod.main()
+
+    assert codigo == 0
+    assert destino.read_bytes() == b"bytes da foto"
+    resultado = json.loads(capsys.readouterr().out)
+    assert resultado["anexo"]["caminho_absoluto"] == str(destino.resolve())
+
+
+def test_main_windows_anexo_id_nao_encontrado(monkeypatch, capsys, tmp_path):
+    import charla.adaptador_windows.midia  # noqa: F401 -- ver comentario no primeiro teste desta classe
+    import charla.cli as cli_mod
+    destino = tmp_path / "foto.jpg"
+    monkeypatch.setattr(cli_mod.sys, "platform", "win32")
+    monkeypatch.setattr(cli_mod.sys, "argv", ["charla", "anexo", "999", "--destino", str(destino)])
+
+    with patch("charla.cli.localizar_pasta_local_state") as m_localizar, \
+         patch("charla.adaptador_windows.midia.resolver_metadado_midia", return_value=None):
+        m_localizar.return_value = "/qualquer"
+        codigo = cli_mod.main()
+
+    assert codigo == 1
+    erro = json.loads(capsys.readouterr().err)
+    assert "999" in erro["erro"]
+    assert not destino.exists()
+
+
+def test_main_windows_anexo_destino_invalido_recusa_nomeada(monkeypatch, capsys):
+    import charla.adaptador_windows.midia  # noqa: F401 -- ver comentario no primeiro teste desta classe
+    import charla.cli as cli_mod
+    monkeypatch.setattr(cli_mod.sys, "platform", "win32")
+    monkeypatch.setattr(
+        cli_mod.sys, "argv",
+        ["charla", "anexo", "123", "--destino", "/pasta/que/nao/existe/foto.jpg"],
+    )
+
+    with patch("charla.cli.localizar_pasta_local_state") as m_localizar, \
+         patch("charla.adaptador_windows.midia.resolver_metadado_midia") as m_resolver:
+        m_localizar.return_value = "/qualquer"
+        codigo = cli_mod.main()
+
+    assert codigo == 1
+    erro = json.loads(capsys.readouterr().err)
+    assert "não existe" in erro["erro"]
+    m_resolver.assert_not_called()

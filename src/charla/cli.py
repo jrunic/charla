@@ -90,14 +90,43 @@ def comando_mensagens(args, caminho_generic_storage=None, caminho_contacts=None)
 
 
 def comando_anexo(args, caminho_generic_storage=None, caminho_contacts=None):
-    return {
-        "erro": (
-            "mídia no Windows não está implementada nesta versão do charla — "
-            "o WhatsApp Desktop para Windows não guarda caminho de arquivo "
-            "amigável para mídia recebida (medido; ver documento técnico "
-            "'whatsapp-desktop-windows-medicao-plano0-charla.md', item 6)."
-        )
-    }
+    from pathlib import Path
+
+    from charla.adaptador_windows.midia import (
+        ConexaoComWhatsAppIndisponivel,
+        DecifraDeMidiaFalhou,
+        baixar_e_decifrar,
+        resolver_metadado_midia,
+    )
+    from charla.escrita_atomica import escrever_bytes, validar_destino
+
+    if not args.destino:
+        return {
+            "erro": (
+                "--destino é obrigatório no Windows — a mídia não existe "
+                "como arquivo até ser extraída; informe onde salvar."
+            )
+        }
+    destino = Path(args.destino)
+    try:
+        validar_destino(destino)
+    except ValueError as e:
+        return {"erro": str(e)}
+
+    try:
+        metadado = resolver_metadado_midia(args.id)
+    except ConexaoComWhatsAppIndisponivel as e:
+        return {"erro": str(e)}
+    if metadado is None:
+        return {"erro": f"anexo {args.id} não encontrado"}
+
+    try:
+        dados = baixar_e_decifrar(metadado["directPath"], metadado["mediaKey"], metadado["mimetype"])
+    except (DecifraDeMidiaFalhou, OSError) as e:
+        return {"erro": str(e)}
+
+    escrever_bytes(destino, dados)
+    return {"anexo": {"id": args.id, "caminho_absoluto": str(destino.resolve())}}
 
 
 def comando_habilitar_autor_windows(args, **kwargs):
@@ -149,6 +178,7 @@ def montar_parser() -> argparse.ArgumentParser:
 
     p_anexo = subs.add_parser("anexo")
     p_anexo.add_argument("id")
+    p_anexo.add_argument("--destino")
     p_anexo.set_defaults(funcao=comando_anexo)
 
     p_habilitar = subs.add_parser("habilitar-autor-windows")
@@ -181,13 +211,27 @@ def _main_windows(args) -> int:
         return 0
 
     if args.funcao is comando_anexo:
-        # achado ajusta da revisao dev-10 (2a rodada): `anexo` roda a
-        # cadeia de decifra inteira so pra devolver uma recusa que nao
-        # depende de banco nenhum (Decisao 1) -- mesmo desvio de
+        # anexo no Windows nao precisa da cadeia de decifra do SQLite --
+        # metadado de midia vem do runtime JS via CDP (achado do Plano 0
+        # do incremento de anexo, 22/09/2026), mesmo desvio de
         # habilitar-autor-windows, sem abrir diretorio_de_trabalho.
-        resultado = comando_anexo(args)
+        try:
+            resultado = comando_anexo(args)
+        except Exception as e:  # noqa: BLE001 -- rede de seguranca deliberada
+            print(json.dumps({"erro": str(e)}, ensure_ascii=False), file=sys.stderr)
+            return 1
+        # comando_anexo DEVOLVE {"erro": ...} nos casos de recusa nomeada
+        # (destino ausente, invalido, id nao encontrado) -- nunca levanta
+        # nesses casos, entao o try/except acima so pega excecao
+        # inesperada. Bifurca o canal aqui, mesmo contrato que
+        # comandos-e-saida.md ja documenta (erro vai pra stderr sem
+        # indent, sucesso vai pra stdout com indent=2) -- mesmo padrao
+        # que _main_macos ja segue.
+        if "erro" in resultado:
+            print(json.dumps(resultado, ensure_ascii=False), file=sys.stderr)
+            return 1
         print(json.dumps(resultado, ensure_ascii=False, indent=2))
-        return 1
+        return 0
 
     with diretorio_de_trabalho() as pasta_trabalho:
         try:
